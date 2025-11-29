@@ -1,59 +1,55 @@
-# Roblox Auto Downgrader
+# Roblox Downgrader
 
-Download and install any version of Roblox using WEAO RDD.
+Download and install any Roblox version with protocol handler support.
 
 ## Requirements
 
-- Python 3.7 or higher
-- One of the following browsers:
-  - Google Chrome
-  - Microsoft Edge
-  - Mozilla Firefox
+- Python 3.7+
+- Windows
 
 ## Installation
 
-1. Install a supported browser if not already installed
-2. Run `run.bat` or execute `python Downloader.py`
-3. Python dependencies will be installed automatically on first run
-4. The script will detect available browsers and let you choose
+Run `run.bat` or `python Downloader.py`
 
 ## Features
 
-- Download latest Roblox version
-- Download previous version (downgrade)
-- Download specific version by hash
-- Install directly to Roblox directory
-- Clean all installed versions
-- Optional WEAO Launcher integration
+- Download latest/previous versions
+- Custom version by hash
+- Auto-install to Roblox directory
+- Protocol handler registration (launch from web)
+- Delete all versions
+- Launch Roblox directly
 
-## Usage
+## Menu
 
-Run `run.bat` and follow the menu prompts:
+```
+1. Install Roblox
+2. Delete All Versions
+3. Register Protocol Handlers
+4. Remove Protocol Handlers
+5. Launch Roblox
+6. Exit
+```
 
-1. **Download & Install Roblox** - Download any version
-2. **Clean All Roblox Versions** - Remove all installed versions
-3. **Exit** - Close the program
+## How It Works
 
-### Binary Types
+1. Fetches version from Roblox DeployHistory.txt
+2. Downloads manifest from Roblox CDN
+3. Downloads and packages all files
+4. Installs to Roblox directory
+5. Registers protocol handlers for web launch
 
-- WindowsPlayer - Roblox Player for Windows
-- WindowsStudio64 - Roblox Studio for Windows
-- MacPlayer - Roblox Player for Mac
-- MacStudio - Roblox Studio for Mac
+## Protocol Handlers
 
-## Notes
-
-- Downloads are saved to `downloads/` folder
-- Browser window will open during download process
-- Large downloads may take several minutes
-- WEAO Launcher allows launching from Roblox.com
+After registering, you can launch Roblox from:
+- roblox:// links
+- roblox-player:// links
+- Roblox.com website
 
 ## Credits
 
-This tool uses the WEAO RDD service (https://rdd.weao.gg) for downloading Roblox versions.
-
-WEAO RDD is based on the original RDD project by Latte Softworks (https://github.com/latte-soft/rdd), licensed under MIT License.
+Based on RDD by Latte Softworks: https://github.com/latte-soft/rdd
 
 ## License
 
-MIT License - See LICENSE file for details
+MIT License
