@@ -7,7 +7,7 @@ import time
 import io
 import winreg
 
-REQUIRED_PACKAGES = ["requests"]
+REQUIRED_PACKAGES = ["requests", "rich"]
 
 def check_and_install_dependencies():
     print("Checking dependencies...")
@@ -29,6 +29,14 @@ def check_and_install_dependencies():
 check_and_install_dependencies()
 
 import requests
+from rich.console import Console
+from rich.panel import Panel
+from rich.progress import Progress, SpinnerColumn, BarColumn, TextColumn, DownloadColumn, TransferSpeedColumn
+from rich.prompt import Prompt, Confirm
+from rich.table import Table
+from rich import print as rprint
+
+console = Console()
 
 CDN_BASE = "https://setup-aws.rbxcdn.com"
 DEPLOY_HISTORY_URL = "https://setup.rbxcdn.com/DeployHistory.txt"
@@ -99,7 +107,7 @@ EXTRACT_ROOTS_STUDIO = {
 
 
 def get_version_from_history(version_mode, binary_type):
-    print("Getting version...")
+    console.print("[cyan]Getting version...[/cyan]")
     response = requests.get(DEPLOY_HISTORY_URL)
     response.raise_for_status()
     
@@ -128,12 +136,15 @@ def get_version_from_history(version_mode, binary_type):
     else:
         return None
     
-    print(f"Version: {version_hash}")
+    console.print(f"[green]Version: {version_hash}[/green]")
     return version_hash
 
 
+
+
+
 def download_and_package_roblox(binary_type, version_hash, output_path):
-    print("\nFetching manifest...")
+    console.print("\n[cyan]Fetching manifest...[/cyan]")
     
     version_path = f"{CDN_BASE}/{version_hash}-"
     manifest_url = f"{version_path}rbxPkgManifest.txt"
@@ -141,8 +152,8 @@ def download_and_package_roblox(binary_type, version_hash, output_path):
     response = requests.get(manifest_url)
     
     if response.status_code == 403:
-        print("\nError: Version not available on Roblox CDN")
-        print("Only recent versions can be downloaded")
+        console.print("[red]Error: Version not available on Roblox CDN[/red]")
+        console.print("[yellow]Only recent versions can be downloaded[/yellow]")
         raise ValueError("Version not available")
     
     response.raise_for_status()
@@ -156,8 +167,7 @@ def download_and_package_roblox(binary_type, version_hash, output_path):
     
     packages = [line for line in manifest_lines if line.endswith(".zip")]
     
-    print(f"Found {len(packages)} packages")
-    print("Downloading and packaging...")
+    console.print(f"[green]Found {len(packages)} packages[/green]\n")
     
     final_zip = zipfile.ZipFile(output_path, 'w', zipfile.ZIP_STORED)
     
@@ -168,34 +178,57 @@ def download_and_package_roblox(binary_type, version_hash, output_path):
         '    <BaseUrl>http://www.roblox.com</BaseUrl>\n'
         '</Settings>\n')
     
-    for i, package_name in enumerate(packages, 1):
-        print(f"  [{i}/{len(packages)}] {package_name}")
+    with Progress(
+        SpinnerColumn(),
+        TextColumn("[progress.description]{task.description}"),
+        BarColumn(),
+        TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
+        console=console
+    ) as progress:
+        task = progress.add_task("[cyan]Downloading packages...", total=len(packages))
         
-        package_url = version_path + package_name
-        response = requests.get(package_url)
-        response.raise_for_status()
-        
-        extract_root = extract_roots.get(package_name, "")
-        
-        package_zip = zipfile.ZipFile(io.BytesIO(response.content))
-        for file_info in package_zip.filelist:
-            if not file_info.filename.endswith("/"):
-                file_data = package_zip.read(file_info.filename)
-                fixed_path = file_info.filename.replace("\\", "/")
-                final_zip.writestr(extract_root + fixed_path, file_data)
-        package_zip.close()
-    
-
+        for package_name in packages:
+            progress.update(task, description=f"[cyan]{package_name}")
+            
+            package_url = version_path + package_name
+            response = requests.get(package_url)
+            response.raise_for_status()
+            
+            extract_root = extract_roots.get(package_name, "")
+            
+            package_zip = zipfile.ZipFile(io.BytesIO(response.content))
+            for file_info in package_zip.filelist:
+                if not file_info.filename.endswith("/"):
+                    file_data = package_zip.read(file_info.filename)
+                    fixed_path = file_info.filename.replace("\\", "/")
+                    final_zip.writestr(extract_root + fixed_path, file_data)
+            package_zip.close()
+            
+            progress.advance(task)
     
     final_zip.close()
-    print("Done")
+    console.print("[green]Done![/green]")
 
 
 def extract_zip(zip_path, extract_to):
-    print("\nExtracting...")
+    console.print("\n[cyan]Extracting...[/cyan]")
     with zipfile.ZipFile(zip_path, "r") as zip_ref:
-        zip_ref.extractall(extract_to)
-    print("Done")
+        members = zip_ref.namelist()
+        
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            BarColumn(),
+            TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
+            console=console
+        ) as progress:
+            task = progress.add_task("[cyan]Extracting files...", total=len(members))
+            
+            for member in members:
+                zip_ref.extract(member, extract_to)
+                progress.advance(task)
+    
+    console.print("[green]Done![/green]")
 
 
 def get_roblox_install_path(binary_type):
@@ -306,26 +339,38 @@ def unregister_protocol_handlers():
 
 
 def launch_roblox():
+    console.print("\n[cyan]Launching Roblox Player...[/cyan]")
+    
     roblox_path = get_roblox_install_path("WindowsPlayer")
     if not roblox_path or not roblox_path.exists():
-        print("Error: No Roblox installation found")
+        console.print("[red]Error: No Roblox Player installation found[/red]")
+        input("\nPress Enter to continue...")
         return False
     
     versions = list(roblox_path.glob("version-*"))
     if not versions:
-        print("Error: No Roblox version found")
+        console.print("[red]Error: No Roblox Player version found[/red]")
+        input("\nPress Enter to continue...")
         return False
     
     version_path = max(versions, key=lambda p: p.stat().st_mtime)
     launcher_path = version_path / "RobloxPlayerBeta.exe"
     
     if not launcher_path.exists():
-        print("Error: RobloxPlayerBeta.exe not found")
+        console.print("[red]Error: RobloxPlayerBeta.exe not found[/red]")
+        console.print(f"[yellow]Looked in: {version_path}[/yellow]")
+        input("\nPress Enter to continue...")
         return False
     
-    subprocess.Popen([str(launcher_path)])
-    print("Launching Roblox...")
-    return True
+    try:
+        subprocess.Popen([str(launcher_path)], creationflags=subprocess.CREATE_NEW_CONSOLE)
+        console.print(f"[green]Launched from: {version_path.name}[/green]")
+        time.sleep(1)
+        return True
+    except Exception as e:
+        console.print(f"[red]Error launching: {e}[/red]")
+        input("\nPress Enter to continue...")
+        return False
 
 
 def clean_all_roblox_versions():
@@ -365,18 +410,25 @@ def clean_all_roblox_versions():
 
 def main():
     while True:
-        print("\n" + "=" * 40)
-        print("ROBLOX DOWNGRADER")
-        print("=" * 40)
+        console.clear()
+        console.print(Panel.fit(
+            "[bold cyan]ROBLOX DOWNGRADER[/bold cyan]",
+            border_style="cyan"
+        ))
 
-        print("\n1. Install Roblox")
-        print("2. Delete All Versions")
-        print("3. Register Protocol Handlers")
-        print("4. Remove Protocol Handlers")
-        print("5. Launch Roblox")
-        print("6. Exit")
-
-        choice = input("\n> ").strip()
+        table = Table(show_header=False, box=None, padding=(0, 2))
+        table.add_column(style="cyan", justify="right")
+        table.add_column(style="white")
+        
+        table.add_row("1", "Install Roblox")
+        table.add_row("2", "Delete All Versions")
+        table.add_row("3", "Register Protocol Handlers")
+        table.add_row("4", "Remove Protocol Handlers")
+        table.add_row("5", "Launch Roblox")
+        table.add_row("6", "Exit")
+        
+        console.print(table)
+        choice = Prompt.ask("\n[cyan]Choice[/cyan]", choices=["1", "2", "3", "4", "5", "6"])
 
         if choice == "2":
             clean_all_roblox_versions()
@@ -398,80 +450,82 @@ def main():
         
         break
 
-    print("\nType:")
-    print("1. Player")
-    print("2. Studio")
+    console.print("\n[cyan]Type:[/cyan]")
+    console.print("  1. Player")
+    console.print("  2. Studio")
+    console.print("  3. Both")
 
-    choice = input("\n> ").strip()
-    if choice == "1":
-        binary_type = "WindowsPlayer"
-    elif choice == "2":
-        binary_type = "WindowsStudio64"
+    choice = Prompt.ask("\n[cyan]Choice[/cyan]", choices=["1", "2", "3"])
+    
+    if choice == "3":
+        binary_types = ["WindowsPlayer", "WindowsStudio64"]
     else:
-        print("Invalid")
-        return
+        binary_types = ["WindowsPlayer" if choice == "1" else "WindowsStudio64"]
 
-    print("\nVersion:")
-    print("1. Latest")
-    print("2. Previous")
-    print("3. Custom Hash")
+    console.print("\n[cyan]Version:[/cyan]")
+    console.print("  1. Latest")
+    console.print("  2. Previous")
+    console.print("  3. Custom Hash")
 
-    version_choice = input("\n> ").strip()
-
-    if version_choice == "3":
-        version_hash = input("\nVersion hash: ").strip()
-        if not version_hash:
-            print("Empty hash")
-            return
-    else:
-        try:
-            version_hash = get_version_from_history(version_choice, binary_type)
-            if not version_hash:
-                print("Failed")
-                return
-        except Exception as e:
-            print(f"Error: {e}")
-            return
+    version_choice = Prompt.ask("\n[cyan]Choice[/cyan]", choices=["1", "2", "3"])
 
     downloads_dir = Path("downloads")
     downloads_dir.mkdir(exist_ok=True)
 
-    try:
-        zip_filename = f"WEAO-{binary_type}-{version_hash}.zip"
-        zip_path = downloads_dir / zip_filename
+    for binary_type in binary_types:
+        if len(binary_types) > 1:
+            type_name = "Player" if binary_type == "WindowsPlayer" else "Studio"
+            console.print(f"\n[bold cyan]Installing {type_name}...[/bold cyan]")
         
-        download_and_package_roblox(binary_type, version_hash, zip_path)
+        if version_choice == "3":
+            version_hash = Prompt.ask(f"\n[cyan]Version hash for {binary_type}[/cyan]")
+            if not version_hash:
+                console.print("[red]Empty hash[/red]")
+                continue
+        else:
+            try:
+                version_hash = get_version_from_history(version_choice, binary_type)
+                if not version_hash:
+                    console.print("[red]Failed[/red]")
+                    continue
+            except Exception as e:
+                console.print(f"[red]Error: {e}[/red]")
+                continue
 
-        roblox_install_path = get_roblox_install_path(binary_type)
-        
-        if roblox_install_path:
-            delete_old_roblox(roblox_install_path)
+        try:
+            zip_filename = f"WEAO-{binary_type}-{version_hash}.zip"
+            zip_path = downloads_dir / zip_filename
             
-            roblox_install_path.mkdir(parents=True, exist_ok=True)
-            extract_dir = roblox_install_path / version_hash
-            extract_dir.mkdir(exist_ok=True)
-            
-            kill_roblox_processes()
-            extract_zip(zip_path, extract_dir)
-            
-            print(f"\nInstalled to: {extract_dir.absolute()}")
-            
-            if input("\nRegister protocol handlers? (y/n): ").strip().lower() == "y":
-                register_protocol_handlers()
+            download_and_package_roblox(binary_type, version_hash, zip_path)
 
-        if input("\nDelete zip? (y/n): ").strip().lower() == "y":
-            os.remove(zip_path)
-            print("Deleted")
-        
-        if input("\nMain menu? (y/n): ").strip().lower() == "y":
-            main()
+            roblox_install_path = get_roblox_install_path(binary_type)
+            
+            if roblox_install_path:
+                delete_old_roblox(roblox_install_path)
+                
+                roblox_install_path.mkdir(parents=True, exist_ok=True)
+                extract_dir = roblox_install_path / version_hash
+                extract_dir.mkdir(exist_ok=True)
+                
+                kill_roblox_processes()
+                extract_zip(zip_path, extract_dir)
+                
+                console.print(f"\n[green]Installed to: {extract_dir.absolute()}[/green]")
+                
+                if binary_type == "WindowsPlayer":
+                    register_protocol_handlers()
+                
+                os.remove(zip_path)
+                console.print("[green]Zip deleted[/green]\n")
 
-    except Exception as e:
-        print(f"\nError: {e}")
-        import traceback
-        traceback.print_exc()
-        return
+        except Exception as e:
+            console.print(f"\n[red]Error: {e}[/red]")
+            time.sleep(2)
 
 
 if __name__ == "__main__":
-    main()
+    while True:
+        try:
+            main()
+        except KeyboardInterrupt:
+            break
