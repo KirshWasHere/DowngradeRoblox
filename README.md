@@ -4,13 +4,18 @@ Download and install any version of Roblox using WEAO RDD.
 
 ## Requirements
 
-- Python 3.7+
-- Google Chrome browser
+- Python 3.7 or higher
+- One of the following browsers:
+  - Google Chrome
+  - Microsoft Edge
+  - Mozilla Firefox
 
 ## Installation
 
-1. Run `run.bat` or execute `python Downloader.py`
-2. Dependencies will be installed automatically
+1. Install a supported browser if not already installed
+2. Run `run.bat` or execute `python Downloader.py`
+3. Python dependencies will be installed automatically on first run
+4. The script will detect available browsers and let you choose
 
 ## Features
 
