@@ -45,4 +45,10 @@ Run `run.bat` and follow the menu prompts:
 
 ## Credits
 
-Powered by WEAO RDD (https://rdd.weao.gg)
+This tool uses the WEAO RDD service (https://rdd.weao.gg) for downloading Roblox versions.
+
+WEAO RDD is based on the original RDD project by Latte Softworks (https://github.com/latte-soft/rdd), licensed under MIT License.
+
+## License
+
+MIT License - See LICENSE file for details
