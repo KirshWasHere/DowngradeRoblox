@@ -33,7 +33,7 @@ Run `run.bat` or `python Downloader.py`
 
 ## How It Works
 
-1. Fetches version from Roblox DeployHistory.txt -edit: DeployHistory.txt is deleted instead it fetches versions from "https://setup.rbxcdn.com/DeployHistory.txt" it gets updated by roblox everytime theres a new version
+1. Fetches version from Roblox [DeployHistory.txt](https://setup.rbxcdn.com/DeployHistory.txt)
 2. Downloads manifest from Roblox CDN
 3. Downloads and packages all files
 4. Installs to Roblox directory
