@@ -6,9 +6,8 @@ import zipfile
 import time
 import io
 import winreg
-from datetime import datetime
 
-REQUIRED_PACKAGES = ["requests", "rich"]
+REQUIRED_PACKAGES = ["requests", "rich", "questionary"]
 
 def check_and_install_dependencies():
     print("Checking dependencies...")
@@ -32,12 +31,25 @@ check_and_install_dependencies()
 import requests
 from rich.console import Console
 from rich.panel import Panel
-from rich.progress import Progress, SpinnerColumn, BarColumn, TextColumn, DownloadColumn, TransferSpeedColumn
-from rich.prompt import Prompt, Confirm
-from rich.table import Table
-from rich import print as rprint
+from rich.progress import Progress, SpinnerColumn, BarColumn, TextColumn
+from rich.prompt import Prompt
+import questionary
+from questionary import Style
 
 console = Console()
+
+custom_style = Style([
+    ('qmark', 'fg:#673ab7 bold'),
+    ('question', 'bold'),
+    ('answer', 'fg:#f44336 bold'),
+    ('pointer', 'fg:#673ab7 bold'),
+    ('highlighted', 'fg:#673ab7 bold'),
+    ('selected', 'fg:#cc5454'),
+    ('separator', 'fg:#cc5454'),
+    ('instruction', 'fg:#000000'),
+    ('text', ''),
+    ('disabled', 'fg:#858585 italic')
+])
 
 CDN_BASE = "https://setup-aws.rbxcdn.com"
 DEPLOY_HISTORY_URL = "https://setup.rbxcdn.com/DeployHistory.txt"
@@ -107,50 +119,91 @@ EXTRACT_ROOTS_STUDIO = {
 }
 
 
-def get_version_history(binary_type, limit=15):
-    console.print("[cyan]Getting version history...[/cyan]")
+def parse_deploy_history(binary_type, max_versions=15):
     response = requests.get(DEPLOY_HISTORY_URL)
     response.raise_for_status()
     
     lines = response.text.strip().split("\n")
-    
     target_type = "WindowsPlayer" if binary_type == "WindowsPlayer" else "Studio64"
     versions = []
-    seen_hashes = set()
     
-    for line in reversed(lines):
+    for line in reversed(lines[-200:]):
         if f"New {target_type}" in line and "version-" in line:
-            parts = line.split("version-")
-            if len(parts) > 1:
-                version_hash = "version-" + parts[1].split()[0]
-                if version_hash not in seen_hashes:
-                    # Extract date and time from the start of the line
-                    # Find the date string, which is between " at " and the first comma
-                    try:
-                        start_index = line.index(" at ") + 4
-                        end_index = line.index(",", start_index)
-                        date_time_str = line[start_index:end_index].strip()
-
-                        # Parse the original format and reformat to MM/DD/YYYY HH:MM:SS AM/PM
-                        dt_object = datetime.strptime(date_time_str, "%m/%d/%Y %I:%M:%S %p")
-                        formatted_date_time = dt_object.strftime("%m/%d/%Y %I:%M:%S %p")
-                    except ValueError:
-                        # Fallback if parsing fails for any reason
-                        formatted_date_time = "Date N/A"
-
-                    versions.append((version_hash, formatted_date_time))
-                    seen_hashes.add(version_hash)
-                if len(versions) >= limit:
-                    break
+            try:
+                parts = line.split("version-")
+                if len(parts) > 1:
+                    version_hash = "version-" + parts[1].split()[0]
+                    
+                    date_str = ""
+                    if " at " in line:
+                        date_part = line.split(" at ")[1].split(",")[0].strip()
+                        date_str = date_part
+                    
+                    if version_hash not in [v["hash"] for v in versions]:
+                        versions.append({
+                            "hash": version_hash,
+                            "date": date_str,
+                            "raw_line": line
+                        })
+                        
+                        if len(versions) >= max_versions:
+                            break
+            except:
+                continue
     
-    if not versions:
-        raise ValueError("Could not find any versions in deploy history")
-    
-    console.print(f"[green]Found {len(versions)} versions[/green]")
     return versions
 
 
+def get_version_from_history(version_mode, binary_type):
+    console.print("[cyan]Getting version...[/cyan]")
+    versions = parse_deploy_history(binary_type, max_versions=15)
+    
+    if not versions:
+        raise ValueError("Could not find version in deploy history")
+    
+    if version_mode == "1":
+        version_hash = versions[0]["hash"]
+    elif version_mode == "2":
+        version_hash = versions[2]["hash"] if len(versions) > 2 else versions[-1]["hash"]
+    else:
+        return None
+    
+    console.print(f"[green]Version: {version_hash}[/green]")
+    return version_hash
 
+
+def show_version_list_and_select(binary_type):
+    console.print("\n[cyan]Fetching version history...[/cyan]")
+    versions = parse_deploy_history(binary_type, max_versions=15)
+    
+    if not versions:
+        console.print("[red]No versions found[/red]")
+        return None
+    
+    choices = []
+    for version in versions:
+        date_str = version["date"] if version["date"] else "Unknown date"
+        choice_text = f"{version['hash']} - {date_str}"
+        choices.append({
+            "name": choice_text,
+            "value": version["hash"]
+        })
+    
+    choices.append({"name": "Cancel", "value": None})
+    
+    selected = questionary.select(
+        "Select a version",
+        choices=choices,
+        style=custom_style,
+        use_shortcuts=False,
+        use_arrow_keys=True,
+        qmark=">"
+    ).ask()
+    
+    if selected:
+        console.print(f"\n[green]Selected: {selected}[/green]")
+    
+    return selected
 
 
 def download_and_package_roblox(binary_type, version_hash, output_path):
@@ -422,63 +475,84 @@ def main():
     while True:
         console.clear()
         console.print(Panel.fit(
-            "[bold cyan]ROBLOX DOWNGRADER[/bold cyan]",
+            "[bold cyan]ROBLOX DOWNGRADER[/bold cyan]\n[dim]Created by kirsh/isaac[/dim]",
             border_style="cyan"
         ))
 
-        table = Table(show_header=False, box=None, padding=(0, 2))
-        table.add_column(style="cyan", justify="right")
-        table.add_column(style="white")
-        
-        table.add_row("1", "Install Roblox")
-        table.add_row("2", "Delete All Versions")
-        table.add_row("3", "Register Protocol Handlers")
-        table.add_row("4", "Remove Protocol Handlers")
-        table.add_row("5", "Launch Roblox")
-        table.add_row("6", "Exit")
-        
-        console.print(table)
-        choice = Prompt.ask("\n[cyan]Choice[/cyan]", choices=["1", "2", "3", "4", "5", "6"])
+        action = questionary.select(
+            "",
+            choices=[
+                {"name": "Install Roblox", "value": "install"},
+                {"name": "Launch Roblox", "value": "launch"},
+                {"name": "Register Protocol Handlers", "value": "register"},
+                {"name": "Remove Protocol Handlers", "value": "unregister"},
+                {"name": "Delete All Versions", "value": "delete"},
+                {"name": "Exit", "value": "exit"}
+            ],
+            style=custom_style,
+            use_shortcuts=False,
+            use_arrow_keys=True,
+            qmark=">"
+        ).ask()
 
-        if choice == "2":
-            clean_all_roblox_versions()
+        if action == "delete":
+            if questionary.confirm("Delete all Roblox versions?", default=False, style=custom_style).ask():
+                clean_all_roblox_versions()
+            input("\nPress Enter to continue...")
             continue
-        elif choice == "3":
+        elif action == "register":
             register_protocol_handlers()
+            input("\nPress Enter to continue...")
             continue
-        elif choice == "4":
+        elif action == "unregister":
             unregister_protocol_handlers()
+            input("\nPress Enter to continue...")
             continue
-        elif choice == "5":
+        elif action == "launch":
             launch_roblox()
+            input("\nPress Enter to continue...")
             continue
-        elif choice == "6":
+        elif action == "exit":
+            console.print("\n[cyan]Goodbye![/cyan]")
             return
-        elif choice != "1":
-            print("Invalid")
+        elif action != "install":
             continue
         
         break
 
-    console.print("\n[cyan]Type:[/cyan]")
-    console.print("  1. Player")
-    console.print("  2. Studio")
-    console.print("  3. Both")
-
-    choice = Prompt.ask("\n[cyan]Choice[/cyan]", choices=["1", "2", "3"])
+    binary_choice = questionary.select(
+        "Select installation type",
+        choices=[
+            {"name": "Player", "value": "player"},
+            {"name": "Studio", "value": "studio"},
+            {"name": "Both (Player + Studio)", "value": "both"}
+        ],
+        style=custom_style,
+        use_shortcuts=False,
+        use_arrow_keys=True,
+        qmark=">"
+    ).ask()
     
-    if choice == "3":
+    if binary_choice == "both":
         binary_types = ["WindowsPlayer", "WindowsStudio64"]
+    elif binary_choice == "player":
+        binary_types = ["WindowsPlayer"]
     else:
-        binary_types = ["WindowsPlayer" if choice == "1" else "WindowsStudio64"]
+        binary_types = ["WindowsStudio64"]
 
-    console.print("\n[cyan]Version:[/cyan]")
-    console.print("  1. Latest")
-    console.print("  2. Downgrade (3 versions back)")
-    console.print("  3. Select from a list of recent versions")
-    console.print("  4. Enter a custom hash")
-
-    version_choice = Prompt.ask("\n[cyan]Choice[/cyan]", choices=["1", "2", "3", "4"])
+    version_choice = questionary.select(
+        "Select version",
+        choices=[
+            {"name": "Latest", "value": "latest"},
+            {"name": "Downgrade (3 versions back)", "value": "downgrade"},
+            {"name": "Browse Last 15 Versions", "value": "list"},
+            {"name": "Custom Hash", "value": "custom"}
+        ],
+        style=custom_style,
+        use_shortcuts=False,
+        use_arrow_keys=True,
+        qmark=">"
+    ).ask()
 
     downloads_dir = Path("downloads")
     downloads_dir.mkdir(exist_ok=True)
@@ -488,54 +562,29 @@ def main():
             type_name = "Player" if binary_type == "WindowsPlayer" else "Studio"
             console.print(f"\n[bold cyan]Installing {type_name}...[/bold cyan]")
         
-        version_hash = None
-        try:
-            if version_choice == "4":
-                version_hash = Prompt.ask(f"\n[cyan]Version hash for {binary_type}[/cyan]")
+        if version_choice == "list":
+            version_hash = show_version_list_and_select(binary_type)
+            if not version_hash:
+                console.print("[yellow]Cancelled[/yellow]")
+                continue
+        elif version_choice == "custom":
+            version_hash = questionary.text(
+                f"Enter version hash for {binary_type}:",
+                style=custom_style
+            ).ask()
+            if not version_hash:
+                console.print("[red]Empty hash[/red]")
+                continue
+        else:
+            try:
+                mode = "1" if version_choice == "latest" else "2"
+                version_hash = get_version_from_history(mode, binary_type)
                 if not version_hash:
-                    console.print("[red]Empty hash[/red]")
+                    console.print("[red]Failed[/red]")
                     continue
-            else:
-                versions = get_version_history(binary_type)
-                if not versions:
-                    console.print("[red]Failed to get version history.[/red]")
-                    continue
-
-                if version_choice == "1":
-                    version_hash = versions[0][0] # Get the hash from the tuple
-                    console.print(f"[green]Selected Latest: {version_hash}[/green]")
-                elif version_choice == "2":
-                    if len(versions) < 3:
-                        console.print("[red]Not enough versions available to downgrade 3 versions back.[/red]")
-                        console.print(f"[yellow]Found only {len(versions)} version(s). Try selecting from the list.[/yellow]")
-                        continue
-                    version_hash = versions[2][0] # Get the hash from the tuple
-                    console.print(f"[green]Selected Downgrade: {version_hash}[/green]")
-                elif version_choice == "3":
-                    version_table = Table(title="Recent Roblox Versions", box=None, padding=(0, 2))
-                    version_table.add_column("Index", style="cyan", justify="right")
-                    version_table.add_column("Version Hash", style="white")
-                    version_table.add_column("Release Date", style="magenta")
-
-                    for i, (v_hash, v_date) in enumerate(versions):
-                        version_table.add_row(str(i + 1), v_hash, v_date)
-                    
-                    console.print(version_table)
-                    
-                    selection = Prompt.ask(
-                        f"\n[cyan]Select a version (1-{len(versions)})[/cyan]", 
-                        choices=[str(i) for i in range(1, len(versions) + 1)]
-                    )
-                    version_hash = versions[int(selection) - 1][0] # Get the hash from the tuple
-                    console.print(f"[green]Selected: {version_hash}[/green]")
-
-        except Exception as e:
-            console.print(f"[red]Error during version selection: {e}[/red]")
-            continue
-        
-        if not version_hash:
-            console.print("[red]Could not determine a version to install.[/red]")
-            continue
+            except Exception as e:
+                console.print(f"[red]Error: {e}[/red]")
+                continue
 
         try:
             zip_filename = f"WEAO-{binary_type}-{version_hash}.zip"
