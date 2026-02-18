@@ -47,7 +47,7 @@ After registering, you can launch Roblox from:
 - Roblox.com website
 
 # Updates
-1: New option to install in the same folder as the script.
+- New option to install in the same folder as the script.
 
 ## Credits
 
