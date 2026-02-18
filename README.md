@@ -50,6 +50,9 @@ After registering, you can launch Roblox from:
 
 Based on RDD by Latte Softworks: https://github.com/latte-soft/rdd
 
+# Updates
+1: New option to install in the same folder as the script.
+
 ## License
 
 MIT License

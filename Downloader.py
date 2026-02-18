@@ -12,13 +12,13 @@ REQUIRED_PACKAGES = ["requests", "rich", "questionary"]
 def check_and_install_dependencies():
     print("Checking dependencies...")
     missing = []
-    
+
     for package in REQUIRED_PACKAGES:
         try:
             __import__(package)
         except ImportError:
             missing.append(package)
-    
+
     if missing:
         print(f"Installing: {', '.join(missing)}")
         subprocess.check_call([sys.executable, "-m", "pip", "install"] + missing)
@@ -122,52 +122,52 @@ EXTRACT_ROOTS_STUDIO = {
 def parse_deploy_history(binary_type, max_versions=15):
     response = requests.get(DEPLOY_HISTORY_URL)
     response.raise_for_status()
-    
+
     lines = response.text.strip().split("\n")
     target_type = "WindowsPlayer" if binary_type == "WindowsPlayer" else "Studio64"
     versions = []
-    
+
     for line in reversed(lines[-200:]):
         if f"New {target_type}" in line and "version-" in line:
             try:
                 parts = line.split("version-")
                 if len(parts) > 1:
                     version_hash = "version-" + parts[1].split()[0]
-                    
+
                     date_str = ""
                     if " at " in line:
                         date_part = line.split(" at ")[1].split(",")[0].strip()
                         date_str = date_part
-                    
+
                     if version_hash not in [v["hash"] for v in versions]:
                         versions.append({
                             "hash": version_hash,
                             "date": date_str,
                             "raw_line": line
                         })
-                        
+
                         if len(versions) >= max_versions:
                             break
             except:
                 continue
-    
+
     return versions
 
 
 def get_version_from_history(version_mode, binary_type):
     console.print("[cyan]Getting version...[/cyan]")
     versions = parse_deploy_history(binary_type, max_versions=15)
-    
+
     if not versions:
         raise ValueError("Could not find version in deploy history")
-    
+
     if version_mode == "1":
         version_hash = versions[0]["hash"]
     elif version_mode == "2":
         version_hash = versions[2]["hash"] if len(versions) > 2 else versions[-1]["hash"]
     else:
         return None
-    
+
     console.print(f"[green]Version: {version_hash}[/green]")
     return version_hash
 
@@ -175,11 +175,11 @@ def get_version_from_history(version_mode, binary_type):
 def show_version_list_and_select(binary_type):
     console.print("\n[cyan]Fetching version history...[/cyan]")
     versions = parse_deploy_history(binary_type, max_versions=15)
-    
+
     if not versions:
         console.print("[red]No versions found[/red]")
         return None
-    
+
     choices = []
     for version in versions:
         date_str = version["date"] if version["date"] else "Unknown date"
@@ -188,9 +188,9 @@ def show_version_list_and_select(binary_type):
             "name": choice_text,
             "value": version["hash"]
         })
-    
+
     choices.append({"name": "Cancel", "value": None})
-    
+
     selected = questionary.select(
         "Select a version",
         choices=choices,
@@ -199,48 +199,48 @@ def show_version_list_and_select(binary_type):
         use_arrow_keys=True,
         qmark=">"
     ).ask()
-    
+
     if selected:
         console.print(f"\n[green]Selected: {selected}[/green]")
-    
+
     return selected
 
 
 def download_and_package_roblox(binary_type, version_hash, output_path):
     console.print("\n[cyan]Fetching manifest...[/cyan]")
-    
+
     version_path = f"{CDN_BASE}/{version_hash}-"
     manifest_url = f"{version_path}rbxPkgManifest.txt"
-    
+
     response = requests.get(manifest_url)
-    
+
     if response.status_code == 403:
         console.print("[red]Error: Version not available on Roblox CDN[/red]")
         console.print("[yellow]Only recent versions can be downloaded[/yellow]")
         raise ValueError("Version not available")
-    
+
     response.raise_for_status()
     manifest_lines = [line.strip() for line in response.text.split("\n")]
-    
+
     if manifest_lines[0] != "v0":
         raise ValueError(f"Unknown manifest version: {manifest_lines[0]}")
-    
+
     is_player = "RobloxApp.zip" in manifest_lines
     extract_roots = EXTRACT_ROOTS_PLAYER if is_player else EXTRACT_ROOTS_STUDIO
-    
+
     packages = [line for line in manifest_lines if line.endswith(".zip")]
-    
+
     console.print(f"[green]Found {len(packages)} packages[/green]\n")
-    
+
     final_zip = zipfile.ZipFile(output_path, 'w', zipfile.ZIP_STORED)
-    
-    final_zip.writestr("AppSettings.xml", 
+
+    final_zip.writestr("AppSettings.xml",
         '<?xml version="1.0" encoding="UTF-8"?>\n'
         '<Settings>\n'
         '    <ContentFolder>content</ContentFolder>\n'
         '    <BaseUrl>http://www.roblox.com</BaseUrl>\n'
         '</Settings>\n')
-    
+
     with Progress(
         SpinnerColumn(),
         TextColumn("[progress.description]{task.description}"),
@@ -249,16 +249,16 @@ def download_and_package_roblox(binary_type, version_hash, output_path):
         console=console
     ) as progress:
         task = progress.add_task("[cyan]Downloading packages...", total=len(packages))
-        
+
         for package_name in packages:
             progress.update(task, description=f"[cyan]{package_name}")
-            
+
             package_url = version_path + package_name
             response = requests.get(package_url)
             response.raise_for_status()
-            
+
             extract_root = extract_roots.get(package_name, "")
-            
+
             package_zip = zipfile.ZipFile(io.BytesIO(response.content))
             for file_info in package_zip.filelist:
                 if not file_info.filename.endswith("/"):
@@ -266,9 +266,9 @@ def download_and_package_roblox(binary_type, version_hash, output_path):
                     fixed_path = file_info.filename.replace("\\", "/")
                     final_zip.writestr(extract_root + fixed_path, file_data)
             package_zip.close()
-            
+
             progress.advance(task)
-    
+
     final_zip.close()
     console.print("[green]Done![/green]")
 
@@ -277,7 +277,7 @@ def extract_zip(zip_path, extract_to):
     console.print("\n[cyan]Extracting...[/cyan]")
     with zipfile.ZipFile(zip_path, "r") as zip_ref:
         members = zip_ref.namelist()
-        
+
         with Progress(
             SpinnerColumn(),
             TextColumn("[progress.description]{task.description}"),
@@ -286,17 +286,17 @@ def extract_zip(zip_path, extract_to):
             console=console
         ) as progress:
             task = progress.add_task("[cyan]Extracting files...", total=len(members))
-            
+
             for member in members:
                 zip_ref.extract(member, extract_to)
                 progress.advance(task)
-    
+
     console.print("[green]Done![/green]")
 
 
 def get_roblox_install_path(binary_type):
     local_appdata = Path(os.environ.get("LOCALAPPDATA", ""))
-    
+
     if binary_type in ["WindowsPlayer", "WindowsStudio64"]:
         return local_appdata / "Roblox" / "Versions"
     else:
@@ -306,11 +306,11 @@ def get_roblox_install_path(binary_type):
 def kill_roblox_processes():
     print("Closing Roblox...")
     try:
-        subprocess.run(["taskkill", "/F", "/IM", "RobloxPlayerBeta.exe"], 
+        subprocess.run(["taskkill", "/F", "/IM", "RobloxPlayerBeta.exe"],
                       capture_output=True, check=False)
-        subprocess.run(["taskkill", "/F", "/IM", "RobloxStudioBeta.exe"], 
+        subprocess.run(["taskkill", "/F", "/IM", "RobloxStudioBeta.exe"],
                       capture_output=True, check=False)
-        subprocess.run(["taskkill", "/F", "/IM", "weblauncher.exe"], 
+        subprocess.run(["taskkill", "/F", "/IM", "weblauncher.exe"],
                       capture_output=True, check=False)
         time.sleep(2)
     except:
@@ -320,12 +320,12 @@ def kill_roblox_processes():
 def delete_old_roblox(install_path):
     if not install_path or not install_path.exists():
         return
-    
+
     kill_roblox_processes()
-    
+
     print("Deleting old versions...")
     import shutil
-    
+
     max_retries = 3
     for version_folder in install_path.glob("version-*"):
         if version_folder.is_dir():
@@ -339,41 +339,45 @@ def delete_old_roblox(install_path):
                         time.sleep(1)
                     else:
                         print(f"    Warning: Could not delete (files in use)")
-    
+
     print("Done")
 
 
-def register_protocol_handlers():
+def register_protocol_handlers(install_path=None):
     print("\nRegistering protocol handlers...")
-    
-    roblox_path = get_roblox_install_path("WindowsPlayer")
+
+    if install_path:
+        roblox_path = Path(install_path)
+    else:
+        roblox_path = get_roblox_install_path("WindowsPlayer")
+
     if not roblox_path or not roblox_path.exists():
         print("Error: No Roblox installation found")
         return False
-    
+
     versions = list(roblox_path.glob("version-*"))
     if not versions:
         print("Error: No Roblox version found")
         return False
-    
+
     version_path = max(versions, key=lambda p: p.stat().st_mtime)
     launcher_path = version_path / "RobloxPlayerBeta.exe"
-    
+
     if not launcher_path.exists():
         print("Error: RobloxPlayerBeta.exe not found")
         return False
-    
+
     try:
         for protocol in ["roblox", "roblox-player"]:
             key_path = f"Software\\Classes\\{protocol}"
-            
+
             with winreg.CreateKey(winreg.HKEY_CURRENT_USER, key_path) as key:
                 winreg.SetValue(key, "", winreg.REG_SZ, f"URL:{protocol} Protocol")
                 winreg.SetValueEx(key, "URL Protocol", 0, winreg.REG_SZ, "")
-            
+
             with winreg.CreateKey(winreg.HKEY_CURRENT_USER, f"{key_path}\\shell\\open\\command") as key:
                 winreg.SetValue(key, "", winreg.REG_SZ, f'"{launcher_path}" %1')
-        
+
         print("Done! You can now launch from Roblox.com")
         return True
     except Exception as e:
@@ -383,7 +387,7 @@ def register_protocol_handlers():
 
 def unregister_protocol_handlers():
     print("\nRemoving protocol handlers...")
-    
+
     try:
         for protocol in ["roblox", "roblox-player"]:
             try:
@@ -393,7 +397,7 @@ def unregister_protocol_handlers():
                 winreg.DeleteKey(winreg.HKEY_CURRENT_USER, f"Software\\Classes\\{protocol}")
             except:
                 pass
-        
+
         print("Done!")
         return True
     except Exception as e:
@@ -403,28 +407,28 @@ def unregister_protocol_handlers():
 
 def launch_roblox():
     console.print("\n[cyan]Launching Roblox Player...[/cyan]")
-    
+
     roblox_path = get_roblox_install_path("WindowsPlayer")
     if not roblox_path or not roblox_path.exists():
         console.print("[red]Error: No Roblox Player installation found[/red]")
         input("\nPress Enter to continue...")
         return False
-    
+
     versions = list(roblox_path.glob("version-*"))
     if not versions:
         console.print("[red]Error: No Roblox Player version found[/red]")
         input("\nPress Enter to continue...")
         return False
-    
+
     version_path = max(versions, key=lambda p: p.stat().st_mtime)
     launcher_path = version_path / "RobloxPlayerBeta.exe"
-    
+
     if not launcher_path.exists():
         console.print("[red]Error: RobloxPlayerBeta.exe not found[/red]")
         console.print(f"[yellow]Looked in: {version_path}[/yellow]")
         input("\nPress Enter to continue...")
         return False
-    
+
     try:
         subprocess.Popen([str(launcher_path)], creationflags=subprocess.CREATE_NEW_CONSOLE)
         console.print(f"[green]Launched from: {version_path.name}[/green]")
@@ -517,7 +521,7 @@ def main():
             return
         elif action != "install":
             continue
-        
+
         break
 
     binary_choice = questionary.select(
@@ -532,7 +536,7 @@ def main():
         use_arrow_keys=True,
         qmark=">"
     ).ask()
-    
+
     if binary_choice == "both":
         binary_types = ["WindowsPlayer", "WindowsStudio64"]
     elif binary_choice == "player":
@@ -554,6 +558,16 @@ def main():
         qmark=">"
     ).ask()
 
+    use_root_install = questionary.confirm(
+        "Root install? (Installs in this same folder)",
+        default=False,
+        style=custom_style
+    ).ask()
+
+    custom_install_path = None
+    if use_root_install:
+        custom_install_path = Path(__file__).parent.resolve()
+
     downloads_dir = Path("downloads")
     downloads_dir.mkdir(exist_ok=True)
 
@@ -561,7 +575,7 @@ def main():
         if len(binary_types) > 1:
             type_name = "Player" if binary_type == "WindowsPlayer" else "Studio"
             console.print(f"\n[bold cyan]Installing {type_name}...[/bold cyan]")
-        
+
         if version_choice == "list":
             version_hash = show_version_list_and_select(binary_type)
             if not version_hash:
@@ -589,26 +603,29 @@ def main():
         try:
             zip_filename = f"WEAO-{binary_type}-{version_hash}.zip"
             zip_path = downloads_dir / zip_filename
-            
+
             download_and_package_roblox(binary_type, version_hash, zip_path)
 
-            roblox_install_path = get_roblox_install_path(binary_type)
-            
+            if custom_install_path:
+                roblox_install_path = custom_install_path
+            else:
+                roblox_install_path = get_roblox_install_path(binary_type)
+
             if roblox_install_path:
                 delete_old_roblox(roblox_install_path)
-                
+
                 roblox_install_path.mkdir(parents=True, exist_ok=True)
                 extract_dir = roblox_install_path / version_hash
                 extract_dir.mkdir(exist_ok=True)
-                
+
                 kill_roblox_processes()
                 extract_zip(zip_path, extract_dir)
-                
+
                 console.print(f"\n[green]Installed to: {extract_dir.absolute()}[/green]")
-                
+
                 if binary_type == "WindowsPlayer":
-                    register_protocol_handlers()
-                
+                    register_protocol_handlers(roblox_install_path)
+
                 os.remove(zip_path)
                 console.print("[green]Zip deleted[/green]\n")
 
