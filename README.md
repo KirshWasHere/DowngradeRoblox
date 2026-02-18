@@ -46,12 +46,12 @@ After registering, you can launch Roblox from:
 - roblox-player:// links
 - Roblox.com website
 
+# Updates
+1: New option to install in the same folder as the script.
+
 ## Credits
 
 Based on RDD by Latte Softworks: https://github.com/latte-soft/rdd
-
-# Updates
-1: New option to install in the same folder as the script.
 
 ## License
 
