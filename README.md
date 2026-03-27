@@ -1,4 +1,4 @@
-# Important due to some changes roblox made, the new verisons coming out wont be fetched using this tool u can still download them and whatnot, u just wont be able to see the version/name
+# Important due to some changes roblox made, the new versions coming out wont be fetched using this tool u can still download them and whatnot, u just wont be able to see the version/name
 ill update this in a bit
 
 
